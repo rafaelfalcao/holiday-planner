@@ -35,7 +35,9 @@
   function recalculateSuggestions() {
     const optimized = optimizeDaysOff($holidays.map(h => ({ date: new Date(h.date) })), $year, $ptoDays);
     suggestedDaysOff.set(optimized);
-    if (!$isEditing) toggledDays.set(new Set());
+    isEditing.set(true);
+    toggledDays.set(new Set(optimized.map(d => d.toDateString())));
+    rejectedSuggestions.set(new Set());
   }
 
   function applySuggestedDays() {
@@ -79,11 +81,15 @@
   }
 
   const usedPTO = derived(toggledDays, $toggledDays => $toggledDays.size);
+
   const totalDaysOff = derived([toggledDays, holidays], ([$toggled, $holidays]) => {
     const seen = new Set();
     for (let d = new Date($year, 0, 1); d.getFullYear() === $year; d.setDate(d.getDate() + 1)) {
       const dateStr = new Date(d).toDateString();
-      if ([...$toggled].includes(dateStr) || $holidays.find(h => h.date.toDateString() === dateStr) || d.getDay() === 0 || d.getDay() === 6) {
+      const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+      const isHoliday = $holidays.find(h => h.date.toDateString() === dateStr);
+      const isSelected = $toggled.has(dateStr);
+      if (isHoliday || isSelected || (isWeekend && (isHoliday || isSelected))) {
         seen.add(dateStr);
       }
     }
@@ -121,46 +127,80 @@
   }
 </script>
 
+
 <style>
   :global(body) {
-    background-color: #0b1d3a;
+    background: linear-gradient(180deg, #0a1b2c 0%, #0f2a45 100%);
     color: #ffffff;
     font-family: sans-serif;
     margin: 0;
     padding: 2rem;
   }
-  .controls {
+
+  .controls,
+  .pto-selector,
+  .metrics,
+  .action-buttons,
+  .legend {
     display: flex;
     flex-wrap: wrap;
-    gap: 1rem;
     justify-content: center;
     align-items: center;
-    margin-bottom: 1rem;
+    gap: 1rem;
+    margin-top: 1rem;
   }
+
+  .controls {
+    margin-top: 2rem;
+  }
+
+  .metrics {
+    flex-direction: column;
+    margin-top: 1rem;
+  }
+
+  .action-buttons {
+    flex-wrap: wrap;
+    margin-top: 1.5rem;
+  }
+
+  .legend {
+    gap: 0.75rem;
+    margin-top: 1.5rem;
+  }
+
   .calendar-container {
     display: flex;
     flex-direction: column;
     gap: 2rem;
+    padding-top: 1rem;
   }
+
   .calendar-row {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: 2rem;
   }
+
   .month {
     padding: 0.5rem;
   }
+
   .month h3 {
     text-align: center;
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.8rem;
     font-size: 1.25rem;
+    font-weight: 600;
   }
-  .week-labels, .week {
+
+  .week-labels,
+  .week {
     display: grid;
     grid-template-columns: repeat(7, 2rem);
-    gap: 0.25rem;
+    gap: 0.4rem;
     justify-content: center;
   }
+
   .label {
     width: 2rem;
     height: 2rem;
@@ -170,32 +210,46 @@
     color: white;
     opacity: 1;
   }
+
   .day {
+    background-color: #1e293b;
+    border-radius: 6px;
+    transition: background 0.2s ease;
     width: 2rem;
     height: 2rem;
     text-align: center;
     line-height: 2rem;
     border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 4px;
     cursor: pointer;
   }
-  .holiday {
-    background-color: orange;
+
+  .day:hover {
+    background-color: #334155;
   }
-  .suggested {
-    background-color: #caffbf;
+
+  .holiday {
+    background-color: #f59e0b;
     color: #000;
   }
+
+  .suggested {
+    background-color: #2dd4bf;
+    color: #000;
+  }
+
   .toggled {
-    background-color: #1f6feb !important;
+    background-color: #22c55e !important;
     color: white;
   }
+
   .saturday {
-    background-color: #374151;
+    background-color: #475569;
   }
+
   .sunday {
-    background-color: #4b5563;
+    background-color: #64748b;
   }
+
   .hero {
     text-align: center;
     margin-top: 4rem;
@@ -204,15 +258,18 @@
     margin-left: auto;
     margin-right: auto;
   }
+
   .hero h1 {
     font-size: 2.2rem;
     font-weight: 800;
   }
+
   .hero p {
     font-size: 1.05rem;
     margin: 0.5rem 0;
     line-height: 1.5;
   }
+
   .footer {
     text-align: center;
     margin-top: 2rem;
@@ -220,85 +277,90 @@
     color: #bbb;
     padding: 1rem 0;
   }
+
   .footer p {
     margin: 0;
   }
-  .pto-selector {
-    display: flex;
-    justify-content: center;
-    margin-top: 1.5rem;
-  }
+
   .button {
-    padding: 0.4rem 0.8rem;
-    background: #1f6feb;
-    color: white;
+    background: #3b82f6;
+    border-radius: 6px;
+    padding: 0.5rem 1rem;
+    font-weight: 600;
+    transition: background 0.2s;
     border: none;
-    border-radius: 4px;
+    color: white;
     cursor: pointer;
-    font-weight: 500;
-    transition: background 0.2s ease-in-out;
   }
+
   .button:hover {
-    background: #1158c7;
+    background: #2563eb;
   }
+
   .button:disabled {
     background: #999;
     cursor: not-allowed;
+  }
+
+  .legend span {
+    padding: 2px 6px;
+    margin-right: 1rem;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    font-weight: 500;
   }
 </style>
 
 
 <section class="hero">
-  <h1>🎯 Holiday Time Hacker</h1>
-  <p>
-    In {countryFlagEmoji($selectedCountry)} <strong>{countryNames.of($selectedCountry)}</strong>,
-    you’ve got <strong>{$ptoDays} days off</strong> and <strong>{$holidays.length} public holidays</strong> in <strong>{$year}</strong>.
-  </p>
-  <p>
-    Let’s hack your calendar to unlock <strong>{$totalDaysOff} non-working days</strong>.
-  </p>
+  <div class="controls single-line">
+    <span>In</span>
+
+    <select bind:value={$selectedCountry}>
+      {#each Object.keys(ptoData).sort() as code}
+        <option value={code}>
+          {countryNames.of(code)} {countryFlagEmoji(code)}
+        </option>
+      {/each}
+    </select>
+
+    <span>
+      {countryFlagEmoji($selectedCountry)} <strong>{countryNames.of($selectedCountry)}</strong>,
+      you’ve got
+    </span>
+
+    <button on:click={decrementPTO} aria-label="Decrease PTO">–</button>
+    <span class="pto-count">{$ptoDays}</span>
+    <button on:click={incrementPTO} aria-label="Increase PTO">+</button>
+
+    <span>days off and <strong>{$holidays.length}</strong> public holidays in</span><span>
+        <button on:click={() => year.update(y => y - 1)} disabled={$year <= currentYear}>◀</button>
+    <strong>{$year}</strong>
+    <button on:click={() => year.update(y => y + 1)} disabled={$year >= currentYear + 10}>▶</button></span>
+
+
+  </div>
 </section>
 
-<div class="controls">
-  <select bind:value={$selectedCountry}>
-    {#each Object.keys(ptoData).sort() as code}
-      <option value={code}>{countryNames.of(code)} {countryFlagEmoji(code)}</option>
-    {/each}
-  </select>
 
-  <button on:click={() => year.update(y => y - 1)} disabled={$year <= currentYear}>◀ {$year - 1}</button>
-  <strong class="text-white text-lg">{$year}</strong>
-  <button on:click={() => year.update(y => y + 1)} disabled={$year >= currentYear + 10}>{$year + 1} ▶</button>
-</div>
-
-<div class="pto-selector">
-  <div class="text-center">
-    <label for="ptoDays" class="block text-sm font-medium text-white mb-2">
-      PTO Days <span title="📅 Paid Time Off – Number of vacation days you want to use this year." class="ml-1 cursor-help">📅</span>
-    </label>
-    <div class="flex items-center justify-center">
-      <button type="button" on:click={decrementPTO} class="px-4 py-2 rounded-l-md bg-blue-500 text-white hover:bg-blue-600 focus:outline-none">–</button>
-      <span class="w-16 text-center bg-white text-black border-y border-gray-300 py-2">{$ptoDays}</span>
-      <button type="button" on:click={incrementPTO} class="px-4 py-2 rounded-r-md bg-blue-500 text-white hover:bg-blue-600 focus:outline-none">+</button>
-    </div>
-    {#if ptoError}
-      <p class="text-sm text-red-500 mt-2">{ptoError}</p>
-    {/if}
-  </div>
-</div>
-
-<p style="text-align: center;">Used PTO Days: {$usedPTO} / {$ptoDays}</p>
-<p style="text-align: center;">Total Days Off (holidays + weekends + PTO): {$totalDaysOff}</p>
-
-<div class="controls">
-  <button on:click={applySuggestedDays}>✏️ Edit Suggested PTO</button>
-  <button on:click={recalculateSuggestions}>🔄 Calculate</button>
+<div class="action-buttons">
+  <button class="button" on:click={applySuggestedDays}>✏️ Edit Suggested PTO</button>
+  <button class="button" on:click={recalculateSuggestions}>🔄 Calculate</button>
   {#if $isEditing}
-    <button on:click={cancelEdits}>❌ Cancel Edits</button>
+    <button class="button" on:click={cancelEdits}>❌ Cancel Edits</button>
   {/if}
-  <button on:click={clearAllSelections}>🧹 Clear Calendar</button>
+  <button class="button" on:click={clearAllSelections}>🧹 Clear Calendar</button>
 </div>
 
+<div class="legend">
+  <span style="background:#22c55e;color:white">Your PTO</span>
+  <span style="background:orange;color:black">Holiday</span>
+  <span style="background:#2dd4bf;color:black">Suggested</span>
+</div>
+<div class="metrics">
+  <p>🎉 Total Days Off: {$totalDaysOff}</p>
+  📈🗓 Used Days: {$usedPTO} / {$ptoDays}
+</div>
 <div class="calendar-container">
   {#each [0, 1, 2, 3] as rowIndex}
     <div class="calendar-row">
@@ -339,14 +401,7 @@
   {/each}
 </div>
 
-<section class="hero">
-  <p>
-    This app helps you get the most out of your paid time off by automatically finding the best days
-    to take off around public holidays and weekends. It uses smart calendar analysis to show you how
-    to turn a few PTO days into extended breaks—no guesswork, no wasted days.
-  </p>
-</section>
-
 <footer class="footer">
   <p>Made by Rafael Falcão 🦅 and ChatGPT-4o</p>
 </footer>
+
